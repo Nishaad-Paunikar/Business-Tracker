@@ -8,7 +8,10 @@ from datetime import date
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets",
          "https://www.googleapis.com/auth/drive"]
 
-creds = Credentials.from_service_account_file("credentials.json", scopes=SCOPE)
+import json
+creds_dict = st.secrets["gcp_service_account"]
+creds = Credentials.from_service_account_info(dict(creds_dict), scopes=SCOPE)
+
 client = gspread.authorize(creds)
 
 SHEET_ID = "1xRzv1vE3cz-bN7En0qFpgkGbkxabSuM0eBKzMDhpXq0"
