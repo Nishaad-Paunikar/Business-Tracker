@@ -2,267 +2,183 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-from datetime import date
+from datetime import datetime
 
-# ---------------- GOOGLE SHEETS CONNECTION ----------------
+# =========================
+# PAGE CONFIG
+# =========================
+st.set_page_config(page_title="Inventory & Sales Manager", layout="wide")
+
+# =========================
+# STYLING
+# =========================
+st.markdown("""
+    <style>
+    /* Hide Streamlit default footer & menu */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+    
+    /* Sidebar styling */
+    [data-testid="stSidebar"] {
+        background-color: #0e1117;
+        padding-top: 1.5rem;
+    }
+    .sidebar-button {
+        display: block;
+        text-align: center;
+        background-color: #1e1e1e;
+        color: white;
+        border-radius: 10px;
+        padding: 0.6rem;
+        margin: 0.4rem 0;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-weight: 500;
+    }
+    .sidebar-button:hover {
+        background-color: #2c2c2c;
+    }
+    h1, h2, h3 {
+        color: white !important;
+    }
+    .metric-card {
+        background-color: #1e1e1e;
+        padding: 1rem;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 0 10px rgba(255,255,255,0.1);
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# =========================
+# GOOGLE SHEETS CONNECTION
+# =========================
 SCOPE = ["https://www.googleapis.com/auth/spreadsheets",
          "https://www.googleapis.com/auth/drive"]
 
-import json
 creds_dict = st.secrets["gcp_service_account"]
 creds = Credentials.from_service_account_info(dict(creds_dict), scopes=SCOPE)
-
 client = gspread.authorize(creds)
 
-SHEET_ID = "1xRzv1vE3cz-bN7En0qFpgkGbkxabSuM0eBKzMDhpXq0"
+SHEET_ID = "1xRzv1vE3cz-bN7En0qFpgkGbkxabSuM0eBKzMDhpXq0"  # Replace with your Google Sheet ID
 sheet = client.open_by_key(SHEET_ID)
 
 inventory_ws = sheet.worksheet("Inventory")
 sales_ws = sheet.worksheet("Sales")
 purchases_ws = sheet.worksheet("Purchases")
 
-# ---------------- HELPER FUNCTIONS ----------------
-def get_df(ws):
-    df = pd.DataFrame(ws.get_all_records())
-    df.columns = [c.strip().title() for c in df.columns]
-    return df
+# =========================
+# SIDEBAR NAVIGATION
+# =========================
+st.sidebar.title("📦 Menu")
 
-def update_stock(item_name, change):
-    inv_df = get_df(inventory_ws)
-    if item_name not in inv_df["Item Name"].values:
-        return
-    row_index = inv_df.index[inv_df["Item Name"] == item_name].tolist()[0] + 2
-    current_stock = int(inv_df.loc[inv_df["Item Name"] == item_name, "Stock"].values[0])
-    inventory_ws.update_cell(row_index, 4, current_stock + change)
+menu_option = st.sidebar.radio(
+    "Navigation", 
+    ["Dashboard", "Record Sale", "Record Purchase", "View Inventory"],
+    label_visibility="collapsed"
+)
 
-def add_new_item(item_name, buy_price, initial_stock):
-    inventory_ws.append_row([item_name, buy_price, 0, initial_stock])
+# =========================
+# DASHBOARD
+# =========================
+if menu_option == "Dashboard":
+    st.title("Inventory & Sales Dashboard")
 
-# ---------------- STREAMLIT PAGE CONFIG ----------------
-st.set_page_config(page_title="Inventory Dashboard", page_icon="📦", layout="wide")
+    # Load data
+    inv_df = pd.DataFrame(inventory_ws.get_all_records())
+    sales_df = pd.DataFrame(sales_ws.get_all_records())
+    purchase_df = pd.DataFrame(purchases_ws.get_all_records())
 
-# ---------- CSS FOR AESTHETIC STYLE ----------
-st.markdown("""
-<style>
-/* ---------------- Global ---------------- */
-body {
-    background-color: #0E1117 !important;
-    color: #FAFAFA !important;
-    font-family: 'Inter', sans-serif;
-}
-h1, h2, h3, h4 {
-    color: #FFFFFF !important;
-    font-weight: 600 !important;
-    letter-spacing: -0.3px;
-}
-hr {
-    border: none;
-    border-top: 1px solid #2E2E2E;
-    margin: 2rem 0;
-}
+    col1, col2, col3 = st.columns(3)
 
-/* ---------------- Sidebar ---------------- */
-section[data-testid="stSidebar"] {
-    background-color: #151515 !important;
-    padding: 25px 20px 20px 20px !important;
-    border-right: 1px solid #222;
-}
-.sidebar-title {
-    color: #B3B3B3;
-    font-size: 1.1rem;
-    margin-bottom: 12px;
-    font-weight: 500;
-}
-div[data-testid="stSidebar"] .stButton > button {
-    background-color: #202020 !important;
-    color: #EAEAEA !important;
-    border-radius: 8px !important;
-    border: 1px solid #333 !important;
-    text-align: left !important;
-    font-weight: 500 !important;
-    margin-bottom: 4px !important;
-    padding: 8px 14px !important;
-    transition: all 0.15s ease-in-out !important;
-}
-div[data-testid="stSidebar"] .stButton > button:hover {
-    background-color: #333333 !important;
-    border-color: #444 !important;
-}
+    with col1:
+        total_revenue = sales_df["Total"].sum() if not sales_df.empty else 0
+        st.markdown(f"<div class='metric-card'><h3>Total Revenue</h3><h2>₹{total_revenue:,.2f}</h2></div>", unsafe_allow_html=True)
 
-/* ---------------- Metric Cards ---------------- */
-.metric-card {
-    background: #181818;
-    border-radius: 10px;
-    padding: 24px;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-    text-align: center;
-    color: #F8F9FA;
-    transition: all 0.2s ease;
-}
-.metric-card:hover {
-    transform: translateY(-2px);
-}
-.metric-value {
-    font-size: 2rem;
-    font-weight: 700;
-    color: #00C67A;
-    margin-top: 8px;
-}
+    with col2:
+        total_expense = purchase_df["Total"].sum() if not purchase_df.empty else 0
+        st.markdown(f"<div class='metric-card'><h3>Total Expense</h3><h2>₹{total_expense:,.2f}</h2></div>", unsafe_allow_html=True)
 
-/* ---------------- Tables ---------------- */
-thead tr th {
-    background-color: #202020 !important;
-    color: #CCCCCC !important;
-    font-weight: 600 !important;
-    font-size: 0.95rem !important;
-    border-bottom: 1px solid #333 !important;
-}
-tbody tr:nth-child(odd) {
-    background-color: #151515 !important;
-}
-tbody tr:nth-child(even) {
-    background-color: #1A1A1A !important;
-}
-tbody tr:hover {
-    background-color: #222 !important;
-}
-table {
-    border-radius: 6px !important;
-    overflow: hidden !important;
-}
-</style>
-""", unsafe_allow_html=True)
+    with col3:
+        profit = total_revenue - total_expense
+        profit_color = "green" if profit >= 0 else "red"
+        st.markdown(f"<div class='metric-card'><h3>Profit / Loss</h3><h2 style='color:{profit_color};'>₹{profit:,.2f}</h2></div>", unsafe_allow_html=True)
 
-# ---------------- NAVIGATION ----------------
-if "page" not in st.session_state:
-    st.session_state.page = "Dashboard"
-
-st.sidebar.markdown("<p class='sidebar-title'>Menu</p>", unsafe_allow_html=True)
-
-def nav_button(label):
-    if st.sidebar.button(label, use_container_width=True):
-        st.session_state.page = label
-
-pages = ["Dashboard", "Record Sale", "Record Purchase", "View Inventory"]
-for p in pages:
-    nav_button(p)
-
-choice = st.session_state.page
-
-# ---------------- DASHBOARD ----------------
-if choice == "Dashboard":
-    st.title("Dashboard")
-    inv_df = get_df(inventory_ws)
-    sales_df = get_df(sales_ws)
+    st.markdown("### ")
+    st.markdown("### 📊 Most Sold Items")
 
     if not sales_df.empty:
-        merged = pd.merge(sales_df, inv_df, on="Item Name", how="left")
-        merged["Profit"] = (merged["Sell Price"] - merged["Buy Price"]) * merged["Units Sold"]
-        total_sales = (merged["Units Sold"] * merged["Sell Price"]).sum()
-        total_cost = (merged["Units Sold"] * merged["Buy Price"]).sum()
-        total_profit = merged["Profit"].sum()
-
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            st.markdown(f"<div class='metric-card'><p>Total Revenue</p><div class='metric-value'>₹{round(total_sales):,}</div></div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown(f"<div class='metric-card'><p>Total Cost</p><div class='metric-value'>₹{round(total_cost):,}</div></div>", unsafe_allow_html=True)
-        with c3:
-            st.markdown(f"<div class='metric-card'><p>Total Profit</p><div class='metric-value'>₹{round(total_profit):,}</div></div>", unsafe_allow_html=True)
-
-        # spacing before chart
-        st.markdown("<div style='height:40px;'></div>", unsafe_allow_html=True)
-
-        st.subheader("Most Sold Items")
-        sold_chart = merged.groupby("Item Name")["Units Sold"].sum().sort_values(ascending=False)
-        st.bar_chart(sold_chart)
+        top_sales = sales_df.groupby("Item")["Quantity"].sum().sort_values(ascending=False).head(5)
+        st.bar_chart(top_sales)
     else:
-        st.info("No sales recorded yet.")
+        st.info("No sales data yet.")
 
-# ---------------- RECORD SALE ----------------
-elif choice == "Record Sale":
-    st.title("Record Sale")
-    inv_df = get_df(inventory_ws)
+# =========================
+# RECORD A SALE
+# =========================
+elif menu_option == "Record Sale":
+    st.title("💰 Record a Sale")
+
+    inv_df = pd.DataFrame(inventory_ws.get_all_records())
 
     if inv_df.empty:
-        st.error("Your inventory is empty. Please record purchases first.")
+        st.warning("No items in inventory.")
     else:
-        item_name = st.selectbox("Select Item", inv_df["Item Name"])
-        stock_available = int(inv_df.loc[inv_df["Item Name"] == item_name, "Stock"].values[0])
-        sell_price = st.number_input("Selling Price (₹)", min_value=0.0, value=float(inv_df.loc[inv_df["Item Name"] == item_name, "Sell Price"].values[0]), step=0.5)
-        units_sold = st.number_input("Units Sold", min_value=1, max_value=stock_available, step=1)
-        sale_date = st.date_input("Date of Sale", value=date.today())
+        item = st.selectbox("Select Item", inv_df["Item"])
+        quantity = st.number_input("Quantity Sold", min_value=1, step=1)
+        date = st.date_input("Date of Sale", datetime.today())
 
-        st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
+        selected_item = inv_df[inv_df["Item"] == item].iloc[0]
+        price = selected_item["Sell Price"]
+        total = quantity * price
+
+        st.write(f"**Total Sale Amount:** ₹{total:,.2f}")
 
         if st.button("Record Sale"):
-            sales_ws.append_row([str(sale_date), item_name, units_sold, sell_price])
-            update_stock(item_name, -units_sold)
-            inventory_ws.update_cell(inv_df.index[inv_df["Item Name"] == item_name].tolist()[0] + 2, 3, sell_price)
-            st.success(f"Sale recorded for {item_name} on {sale_date}. Stock reduced by {units_sold}.")
-            st.balloons()
+            new_sale = [item, quantity, price, total, str(date)]
+            sales_ws.append_row(new_sale)
+            current_stock = int(selected_item["Stock"]) - quantity
+            inventory_ws.update_cell(inv_df.index[inv_df["Item"] == item][0] + 2, 4, current_stock)
+            st.success("✅ Sale recorded successfully!")
 
-        st.divider()
-        st.subheader("Delete Sale Record")
-        sales_df = get_df(sales_ws)
-        if not sales_df.empty:
-            sales_df["Display"] = sales_df["Date"] + " | " + sales_df["Item Name"] + " | " + sales_df["Units Sold"].astype(str)
-            selected = st.selectbox("Select sale to delete", sales_df["Display"])
-            if st.button("Delete Selected Sale"):
-                idx = int(sales_df[sales_df["Display"] == selected].index[0])
-                item = sales_df.loc[idx, "Item Name"]
-                units = int(sales_df.loc[idx, "Units Sold"])
-                sales_ws.delete_rows(int(idx + 2))
-                update_stock(item, units)
-                st.success(f"Deleted sale of {units} units of {item}. Stock restored.")
-        else:
-            st.info("No sales to delete.")
+# =========================
+# RECORD A PURCHASE
+# =========================
+elif menu_option == "Record Purchase":
+    st.title("📦 Record a Purchase")
 
-# ---------------- RECORD PURCHASE ----------------
-elif choice == "Record Purchase":
-    st.title("Record Purchase")
-    purchases_df = get_df(purchases_ws)
-    existing_items = purchases_df["Item Name"].unique().tolist() if not purchases_df.empty else []
-    inv_df = get_df(inventory_ws)
+    inv_df = pd.DataFrame(inventory_ws.get_all_records())
+    existing_items = list(inv_df["Item"]) if not inv_df.empty else []
 
-    item_name = st.selectbox("Select or Type Item", options=existing_items + ["<Add new item>"])
-    if item_name == "<Add new item>":
-        item_name = st.text_input("Enter New Item Name").strip()
+    item = st.text_input("Item Name (exact or new)")
+    quantity = st.number_input("Quantity Purchased", min_value=1, step=1)
+    buy_price = st.number_input("Buy Price per Unit (₹)", min_value=0.0, step=0.1)
+    date = st.date_input("Date of Purchase", datetime.today())
 
-    buy_price = st.number_input("Buying Price (₹)", min_value=0.0, step=0.5)
-    units_bought = st.number_input("Units Bought", min_value=1, step=1)
-    purchase_date = st.date_input("Date of Purchase", value=date.today())
+    total = quantity * buy_price
+    st.write(f"**Total Purchase Cost:** ₹{total:,.2f}")
 
     if st.button("Record Purchase"):
-        if not item_name:
-            st.error("Please enter an item name.")
+        purchases_ws.append_row([item, quantity, buy_price, total, str(date)])
+
+        if item in existing_items:
+            current_stock = int(inv_df.loc[inv_df["Item"] == item, "Stock"].values[0]) + quantity
+            inventory_ws.update_cell(inv_df.index[inv_df["Item"] == item][0] + 2, 4, current_stock)
         else:
-            if item_name not in inv_df["Item Name"].values:
-                add_new_item(item_name, buy_price, units_bought)
-                st.info(f"Added new item '{item_name}' to inventory.")
-            else:
-                update_stock(item_name, units_bought)
-            purchases_ws.append_row([str(purchase_date), item_name, units_bought, buy_price])
-            st.success(f"Purchase recorded for {item_name} on {purchase_date}. Stock increased by {units_bought}.")
-            st.balloons()
+            inventory_ws.append_row([item, buy_price, buy_price * 1.2, quantity])  # auto-add new item with sell price = 1.2x buy
+        st.success("✅ Purchase recorded successfully!")
 
-    st.divider()
-    st.subheader("Delete Purchase Record")
-    if not purchases_df.empty:
-        purchases_df["Display"] = purchases_df["Date"] + " | " + purchases_df["Item Name"] + " | " + purchases_df["Units Bought"].astype(str)
-        selected = st.selectbox("Select purchase to delete", purchases_df["Display"])
-        if st.button("Delete Selected Purchase"):
-            idx = int(purchases_df[purchases_df["Display"] == selected].index[0])
-            item = purchases_df.loc[idx, "Item Name"]
-            units = int(purchases_df.loc[idx, "Units Bought"])
-            purchases_ws.delete_rows(int(idx + 2))
-            update_stock(item, -units)
-            st.success(f"Deleted purchase of {units} units of {item}. Stock reduced.")
+# =========================
+# VIEW INVENTORY
+# =========================
+elif menu_option == "View Inventory":
+    st.title("📋 Inventory Overview")
+
+    inv_df = pd.DataFrame(inventory_ws.get_all_records())
+
+    if inv_df.empty:
+        st.info("Inventory is empty.")
     else:
-        st.info("No purchases to delete.")
-
-# ---------------- VIEW INVENTORY ----------------
-elif choice == "View Inventory":
-    st.title("Inventory")
-    inv_df = get_df(inventory_ws)
-    st.dataframe(inv_df, use_container_width=True)
+        st.dataframe(inv_df)
