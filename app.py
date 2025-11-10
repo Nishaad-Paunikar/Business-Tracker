@@ -80,19 +80,25 @@ def get_df(ws):
 
 def append_row_dynamic(ws, data_dict):
     """
-    Appends a row by matching dict keys to headers dynamically.
-    Works regardless of column order or header case.
+    Appends a row to a Google Sheet following the exact column order.
+    Automatically matches headers case-insensitively.
     """
-    headers = [h.strip().lower() for h in ws.row_values(1)]
+    headers = [h.strip() for h in ws.row_values(1)]
+    lower_headers = [h.lower() for h in headers]
+
     row_data = []
-    for h in headers:
-        matched_key = None
-        for key in data_dict.keys():
-            if key.strip().lower() == h:
-                matched_key = key
+    for header in headers:
+        key = header.lower()
+        matched = None
+        for dict_key in data_dict.keys():
+            if dict_key.lower() == key:
+                matched = dict_key
                 break
-        row_data.append(data_dict.get(matched_key, ""))
-    ws.append_row(row_data)
+        row_data.append(data_dict.get(matched, ""))
+
+    # Ensure same number of columns as headers
+    row_data = row_data[:len(headers)]
+    ws.append_row(row_data, value_input_option="USER_ENTERED")
 
 # =========================
 # SIDEBAR MENU
