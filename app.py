@@ -117,7 +117,10 @@ menu_button("Record Sale", "record_sale")
 menu_button("Record Purchase", "record_purchase")
 menu_button("View Inventory", "view_inventory")
 
+if "menu" not in st.session_state:
+    st.session_state["menu"] = "Dashboard"
 menu = st.session_state["menu"]
+
 
 # =========================
 # DASHBOARD
